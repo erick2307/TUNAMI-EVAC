@@ -17,4 +17,4 @@ You can download NetLogo [here](https://ccl.northwestern.edu/netlogo/download.sh
 ---
 ## Example
 
-http://www.regid.irides.tohoku.ac.jp/erick/repository/netlogo/Model67.mp4
+[Animation](http://www.regid.irides.tohoku.ac.jp/erick/repository/netlogo/Model67.mp4)
