@@ -14,6 +14,9 @@ __includes [ "Rayleigh2011.nls" "Astar2011.nls"]
 ;;
 ;; July 2020
 ;; Updated to work in NetLogo 6.1.1
+;;
+;; April 2022
+;; Verified working in NetLogo 6.2.2
 
 globals [ land-patches
           urban-patches
@@ -196,7 +199,7 @@ to load-population
   create-adults #-of-adults [ set dim 1.0 set speed 1.0 * 1.33 / scale]
   create-elders #-of-elders [ set dim 0.8 set speed 0.7 * 1.33 / scale]
   create-cars #-of-cars     [ set dim 1.2 set speed 1.0 * 1.68 / scale] ;same speed but 5 times running
-    let pedestrians (turtle-set kids teens adults elders)
+  let pedestrians (turtle-set kids teens adults elders)
   ask pedestrians [ move-to one-of urban-patches
                     set color black
                     set size ( 1 / scale * dim ) * scale * 5
@@ -691,7 +694,6 @@ to tsunami-run
    set tsu-counter tsu-counter + 1 ;because data is at 0.5s output
    set-current-directory pathdir:get-model-path
 end
-
 
 
 
@@ -1531,7 +1533,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.2.2
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

@@ -26,7 +26,7 @@ to-report Astar [ setup-start setup-target setup-color behavior ]
   set heuristic list behavior behavior
   ask patches with [open? != 0] [ set f 0 set g 0 set h 0 set parent nobody set open? 0]
   ask target [set pcolor space-color]
-;1) Begin at the starting point A and add it to an Ågopen listÅh of squares to be considered. 
+;1) Begin at the starting point A and add it to an √Ögopen list√Öh of squares to be considered. 
 ;The open list is kind of like a shopping list. Right now there is just one item on the list, but we will have more later. 
 ;It contains squares that might fall along the path you want to take, but maybe not. Basically, this is a list of squares that need to be checked out. 
   
@@ -47,7 +47,7 @@ while [ [open?] of target != 2 ]
 ;  display
   
 ;5) Check all of the adjacent squares. Ignoring those that are on the closed list or unwalkable (terrain with walls, water, or other illegal terrain), 
-;add squares to the open list if they are not on the open list already. Make the selected square the ÅgparentÅh of the new squares.
+;add squares to the open list if they are not on the open list already. Make the selected square the √Ögparent√Öh of the new squares.
   
   let walkable [neighbors with [pcolor = space-color]] of current
   ask walkable [ if open? != 2 ;not close
@@ -57,7 +57,7 @@ while [ [open?] of target != 2 ]
                       ]
 
 ;6) If an adjacent square is already on the open list, check to see if this path to that square is a better one. 
-;In other words, check to see if the G score for that square is lower if we use the current square to get there. If not, donÅft do anything. 
+;In other words, check to see if the G score for that square is lower if we use the current square to get there. If not, don√Öft do anything. 
 ;On the other hand, if the G cost of the new path is lower, change the parent of the adjacent square to the selected square 
 ;Finally, recalculate both the F and G scores of that square. If this seems confusing, you will see it illustrated below.
                         
