@@ -186,6 +186,8 @@ to load-spatial
                                      set teb-capacity lput (list self 0) teb-capacity ;gis:property-value ? "capacity") teb-capacity
                                    ]
   ]
+  print teb-capacity
+  print exit-capacity
   set-current-directory pathdir:get-model-path
   output-print (word "Spatial data: " timer " sec.")
   reset-timer
@@ -694,7 +696,6 @@ to tsunami-run
    set tsu-counter tsu-counter + 1 ;because data is at 0.5s output
    set-current-directory pathdir:get-model-path
 end
-
 
 
 
