@@ -1,9 +1,15 @@
 ;;********************************************************************
+;; BASIC INFORMATION
+;; Path finding algorithm based on the A* (A star) approach
 ;; A star searched by patches
 ;; Developed by E. Mas 
 ;; October 2011
 ;; improved from the A star of \citep{Steiner2009}
 ;;*********************************************************************
+;; CHANGELOG:
+;; Oct 2022 - Revised for bugs
+;;*********************************************************************
+;; INSTRUCTIONS
 ;; The library needs in your model to include patches with the following 
 ;; attributes "patches-own [f g h class parent]"
 ;; the program will report a list with the patches of path from start to target

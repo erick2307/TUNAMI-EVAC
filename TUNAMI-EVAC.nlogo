@@ -1,6 +1,6 @@
 extensions [gis pathdir vid]
 
-__includes [ "Rayleigh2011.nls" "Astar2011.nls"]
+__includes [ "departure_curves.nls" "path_finding.nls"]
 
 ;;***********************************************************************************************
 ;; DECLARING VARIABLES
