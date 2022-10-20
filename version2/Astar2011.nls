@@ -1,0 +1,154 @@
+;;********************************************************************
+;; A star searched by patches
+;; Developed by E. Mas 
+;; October 2011
+;; improved from the A star of \citep{Steiner2009}
+;;*********************************************************************
+;; The library needs in your model to include patches with the following 
+;; attributes "patches-own [f g h class parent]"
+;; the program will report a list with the patches of path from start to target
+
+
+globals
+[ start
+  target
+  space-color
+  heuristic
+]
+
+patches-own [f g h parent open?] ;in my original model I already had "class" you should include it if you do not have it
+;open? 0 = NA, 1= open, 2= close
+
+to-report Astar [ setup-start setup-target setup-color behavior ]
+  set start setup-start
+  set target setup-target
+  set space-color setup-color
+  set heuristic list behavior behavior
+  ask patches with [open? != 0] [ set f 0 set g 0 set h 0 set parent nobody set open? 0]
+  ask target [set pcolor space-color]
+;1) Begin at the starting point A and add it to an Ågopen listÅh of squares to be considered. 
+;The open list is kind of like a shopping list. Right now there is just one item on the list, but we will have more later. 
+;It contains squares that might fall along the path you want to take, but maybe not. Basically, this is a list of squares that need to be checked out. 
+  
+  ask start [set open? 1 set parent self]
+
+while [ [open?] of target != 2 ]
+[ if count patches with [open? = 1] = 0 [report []]
+
+;choose the lowest F score square from all those that are on the open list.  
+  
+  let open-agentset patches with [open? = 1]
+  ask open-agentset [ fgh-values ]
+  let current one-of open-agentset with-min [f]
+  
+;4) Drop it from the open list and add it to the closed list
+  
+  ask current [set open? 2]; sprout 1 [ set shape "bot" set color red stamp die ] ]
+;  display
+  
+;5) Check all of the adjacent squares. Ignoring those that are on the closed list or unwalkable (terrain with walls, water, or other illegal terrain), 
+;add squares to the open list if they are not on the open list already. Make the selected square the ÅgparentÅh of the new squares.
+  
+  let walkable [neighbors with [pcolor = space-color]] of current
+  ask walkable [ if open? != 2 ;not close
+                    [ ifelse open? != 1 ;not open
+                      [ set open? 1
+                        set parent current
+                      ]
+
+;6) If an adjacent square is already on the open list, check to see if this path to that square is a better one. 
+;In other words, check to see if the G score for that square is lower if we use the current square to get there. If not, donÅft do anything. 
+;On the other hand, if the G cost of the new path is lower, change the parent of the adjacent square to the selected square 
+;Finally, recalculate both the F and G scores of that square. If this seems confusing, you will see it illustrated below.
+                        
+                      [ let previous-parent parent
+                        ifelse path-cost self > new-path-cost current self
+                        [ set parent current fgh-values ]
+                        [ set parent previous-parent fgh-values ]
+                      ]
+                   ]
+               ] 
+]
+ask target [set pcolor green]
+report show-path
+end
+
+to-report path-cost [candidate]
+let cost 0
+let brush candidate
+ask brush [ set cost cost + g ]
+while [ brush != start ] 
+[ ask [parent] of brush [ set cost cost + g]
+  set brush [parent] of brush
+]
+report cost
+end
+
+to-report new-path-cost [ current candidate ]
+ask candidate [set parent current fgh-values]
+let cost path-cost candidate
+report cost
+end
+
+to fgh-values
+set g precision distance-nowrap parent 2
+set h precision #heuristic 2
+set f path-cost self + h 
+end
+
+to-report show-path
+let brush target
+let my-path [ ]
+set my-path fput brush my-path
+while [ brush != start ] 
+[ set my-path fput ([parent] of brush) my-path
+  set brush [parent] of brush
+]
+report my-path
+end
+
+to-report #heuristic
+;  let heuristic [me]
+  
+  if first heuristic = -1
+  [report 0]
+  
+  if first heuristic = 0
+  [ report precision distance-nowrap target 2 ]
+  
+  if first heuristic = 1
+  [ let xdiff abs(pxcor - [pxcor] of  target )
+    let ydiff abs(pycor - [pycor] of  target )
+    let result ( xdiff + ydiff )
+    report result ]
+  
+  if first heuristic = 2
+  [ let D  1
+    let D2 1.414214
+    let xdiff abs(pxcor - [pxcor] of target)
+    let ydiff abs(pycor - [pycor] of target)
+    let h_diagonal min (list xdiff ydiff)
+    let h_straight xdiff + ydiff
+    let result D2 * h_diagonal + D * ( h_straight - 2 * h_diagonal )
+    report result ]
+  
+  if first heuristic = 3
+  [ let D  1
+    let D2 1.414214
+    let xdiff abs(pxcor - [pxcor] of target )
+    let ydiff abs(pycor - [pycor] of target )
+    let h_diagonal min (list xdiff ydiff)
+    let h_straight xdiff + ydiff
+    let result D2 * h_diagonal + D * ( h_straight - 2 * h_diagonal )
+    
+    ;; tie-breaker: nudge H up by a small amount
+    let h-scale (1 + (16 / 8 / world-width * world-height))
+    set result result * h-scale 
+    report result ]
+  
+  if first heuristic = 4
+  [ let result distance-nowrap target
+    let h-scale (1 + (16 / 8 / world-width + world-height))
+    set result result * h-scale
+    report result ]
+end 
