@@ -180,17 +180,17 @@ to load-spatial
   ask land-patches [ set pcolor white ]
   ask street-patches [ set pcolor green ]
   ask exit-patches [ sprout 1 [set color violet set size 4 set shape "circle" stamp die]
-                     set exit-capacity lput (list self 0) exit-capacity ]
+    set exit-capacity lput (list self 0) exit-capacity ]
   foreach gis:feature-list-of teb-dataset
   [ feat -> ask patches gis:intersecting feat [ sprout 1 [set color violet set size 4 set shape "circle" stamp die]
-                                     set teb-capacity lput (list self 0) teb-capacity ;gis:property-value ? "capacity") teb-capacity
-                                   ]
+    set teb-capacity lput (list self gis:property-value feat "capacity") teb-capacity
   ]
-  print teb-capacity
-  print exit-capacity
-  set-current-directory pathdir:get-model-path
-  output-print (word "Spatial data: " timer " sec.")
-  reset-timer
+]
+print teb-capacity
+print exit-capacity
+set-current-directory pathdir:get-model-path
+output-print (word "Spatial data: " timer " sec.")
+reset-timer
 end
 
 ;;************************************************************************************************ LOAD POPULATION
@@ -696,7 +696,6 @@ to tsunami-run
    set tsu-counter tsu-counter + 1 ;because data is at 0.5s output
    set-current-directory pathdir:get-model-path
 end
-
 
 
 @#$#@#$#@
@@ -1534,7 +1533,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.2.2
+NetLogo 6.3.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@

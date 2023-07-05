@@ -1,0 +1,1 @@
+id,x-ini,y-ini,x-goal,y-goal,x-end,y-end,L0-path,L1-path,td,tsh,zt,C
