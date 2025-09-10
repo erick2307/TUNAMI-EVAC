@@ -1,0 +1,25 @@
+;************************************************************
+;              Rayleigh Distribution calculator
+;                     revised by Erick Mas
+;                          June 2011
+;                     revised November 2011
+;************************************************************
+;To call the library write the name and the two parameters
+;                      rayleigh t ta
+; where, "t" or "x-ray" is the x axis of the distribution and "ta" or "s-ray" is the 
+; meode of distribution and u-ray the mean
+
+to-report cum-rayleigh [ x-ray u-ray] ;calculates the Rayleigh cumulative distribution
+  let s-ray u-ray * (sqrt (2 / pi ))
+  report 1 - exp ( - ( (x-ray ^ 2) / ( 2 * (s-ray ^ 2) ) ) )
+end
+  
+to-report random-rayleigh [ x-ray u-ray ]
+  let s-ray u-ray * ( sqrt ( 2 / pi ) )
+  report ( x-ray / s-ray ^ 2 ) * exp ( - ( x-ray ^ 2) / (2 * (s-ray ^ 2 )))
+end
+
+to-report random-td-rayleigh [ f-ray u-ray ]
+  let s-ray u-ray * ( sqrt (2 / pi ))
+  report ( sqrt ( -2 * s-ray ^ 2 * ln(1 - f-ray) ) )
+end

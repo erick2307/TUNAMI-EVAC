@@ -1,0 +1,1725 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.0" snapToGrid="false">
+  <code><![CDATA[extensions [gis pathdir vid]
+
+__includes [ "departure_curves.nls" "path_finding.nls"]
+
+;;***********************************************************************************************
+;; DECLARING VARIABLES
+;;***********************************************************************************************
+;; GLOBAL VARIABLES
+
+;; September 2012
+;; This is an example of the model TUNAMI-EVAC1 developed by Erick Mas on Sep. 2012.
+;; This model was developed on a NetLogo version 4.x, it may not run on newer versions
+;; Contact the author for the latest update version: mas@irides.tohoku.ac.jp
+;;
+;; July 2020
+;; Updated to work in NetLogo 6.1.1
+;;
+;; April 2022
+;; Verified working in NetLogo 6.2.2
+
+globals [ land-patches
+          urban-patches
+          sea-patches
+          street-patches
+          exit-patches
+          teb-patches
+          teb-capacity
+          exit-capacity
+
+          scale
+          tsu-counter
+          tsunami-file-name
+          Cmax-ped
+          Cmax-car
+
+          decided-kids
+          decided-teens
+          decided-adults
+          decided-elders
+          decided-cars
+
+          safe-kids
+          safe-teens
+          safe-adults
+          safe-elders
+          safe-cars
+
+          casualty-kids
+          casualty-teens
+          casualty-adults
+          casualty-elders
+          casualty-cars
+
+          pop-kids
+          pop-teens
+          pop-adults
+          pop-elders
+          pop-cars
+        ]
+
+breed [ kids kid ]
+breed [ teens teen ]
+breed [ adults adult ]
+breed [ elders elder ]
+breed [ cars car]
+
+kids-own [ dim speed handicap stage path ini goal L heuri td ]
+teens-own [ dim speed handicap stage path ini goal L heuri td ]
+adults-own [ dim speed handicap stage path ini goal L heuri td ]
+elders-own [ dim speed handicap stage path ini goal L heuri td ]
+cars-own [ dim speed handicap stage path ini goal L heuri td ]
+
+patches-own [ zt ]
+
+;;************************************************************************************************
+;; INITIAL CONDITIONS
+;;************************************************************************************************ SETUP
+
+to setup
+  ;; (for this model to work with NetLogo's new plotting features,
+  ;; __clear-all-and-reset-ticks should be replaced with clear-all at
+  ;; the beginning of your setup procedure and reset-ticks at the end
+  ;; of the procedure.)
+  __clear-all-and-reset-ticks
+  set-initial-values
+  load-spatial
+  load-population
+  display
+end
+
+;;************************************************************************************************ SETUP 2
+
+to reload
+  reset-timer
+  clear-turtles
+  clear-output
+  reset-ticks
+  set-initial-values
+  load-population
+end
+
+;;************************************************************************************************ INITIAL VALUES
+
+to set-initial-values
+  random-seed 100
+  set-default-shape turtles "dot"
+  set decided-kids 0
+  set decided-teens 0
+  set decided-adults 0
+  set decided-elders 0
+  set decided-cars 0
+  set safe-kids 0
+  set safe-teens 0
+  set safe-adults 0
+  set safe-elders 0
+  set safe-cars 0
+  set casualty-kids 0
+  set casualty-teens 0
+  set casualty-adults 0
+  set casualty-elders 0
+  set casualty-cars 0
+  set pop-kids 0
+  set pop-teens 0
+  set pop-adults 0
+  set pop-elders 0
+  set pop-cars 0
+  set teb-capacity [ ]
+  set exit-capacity [ ]
+  set scale 5  ;--> very important parameter!
+  set Cmax-ped ceiling (0.7 * scale ^ 2)
+  set Cmax-car ceiling (0.07 * scale ^ 2)
+  if tsunami? [set tsu-counter 53900] ;<------------------------------------------------------------------------------------------CHANGE!!!
+  if movie? [ vid:reset-recorder vid:start-recorder];v.4.1 ->  movie-set-frame-rate movie-frame-rate] let name (word movie-name ETA ".mp4") vid:movie-open name
+  ask patches [set plabel "" set plabel-color black set zt -99]
+  let dir-temp (word pathdir:get-model-path "//Output")
+  set-current-directory dir-temp
+  file-close-all
+  file-open (word "Evacuation-Record" run-number ".txt")
+  file-print "id,x-ini,y-ini,x-goal,y-goal,x-end,y-end,L0-path,L1-path,td,tsh,zt,C"
+  file-close
+  set-current-directory pathdir:get-model-path
+end
+
+;;************************************************************************************************ LOAD SPATIAL
+
+to load-spatial
+  ;resizing the world
+  let x (1320 / scale) - 1
+  let y (-1) * ((1150 / scale) - 1)
+  resize-world 0 x y 0 ;Original 1320x1150
+
+  if scale = 5
+  [ set-patch-size 3 ]
+  if scale = 2
+  [ set-patch-size 1 ] ;this is the scale 2mx2m grid
+
+  ;loading GIS data
+  let dir-temp word pathdir:get-model-path "//SpatialDB"
+  set-current-directory dir-temp
+  gis:load-coordinate-system "Projection.prj"
+  let Land gis:load-dataset "Land.shp"
+  let Urban gis:load-dataset "Urban.shp"
+  let Streets gis:load-dataset "Streets.shp"
+  let Sea gis:load-dataset "Sea.shp"
+  let Exit-dataset gis:load-dataset "Exits.shp"
+  let TEB-dataset gis:load-dataset "TEB.shp"
+
+  gis:set-world-envelope gis:envelope-of Land
+
+  set land-patches patches gis:intersecting land
+  set urban-patches patches gis:intersecting urban
+  gis:set-drawing-color gray
+  gis:fill urban 0.1
+  gis:set-drawing-color blue
+  gis:fill sea 0.1
+  set street-patches patches gis:intersecting streets
+  set exit-patches patches gis:intersecting exit-dataset
+  set teb-patches patches gis:intersecting teb-dataset
+
+  ask land-patches [ set pcolor white ]
+  ask street-patches [ set pcolor green ]
+  ask exit-patches [ sprout 1 [set color violet set size 4 set shape "circle" stamp die]
+    set exit-capacity lput (list self 0) exit-capacity ]
+  foreach gis:feature-list-of teb-dataset
+  [ feat -> ask patches gis:intersecting feat [ sprout 1 [set color violet set size 4 set shape "circle" stamp die]
+    set teb-capacity lput (list self gis:property-value feat "capacity") teb-capacity
+  ]
+]
+print teb-capacity
+print exit-capacity
+set-current-directory pathdir:get-model-path
+output-print (word "Spatial data: " timer " sec.")
+reset-timer
+end
+
+;;************************************************************************************************ LOAD POPULATION
+
+to load-population
+  create-kids #-of-kids     [ set dim 0.6 set speed 0.8 * 1.33 / scale]
+  create-teens #-of-teens   [ set dim 1.0 set speed 1.0 * 1.33 / scale]
+  create-adults #-of-adults [ set dim 1.0 set speed 1.0 * 1.33 / scale]
+  create-elders #-of-elders [ set dim 0.8 set speed 0.7 * 1.33 / scale]
+  create-cars #-of-cars     [ set dim 1.2 set speed 1.0 * 1.68 / scale] ;same speed but 5 times running
+  let pedestrians (turtle-set kids teens adults elders)
+  ask pedestrians [ move-to one-of urban-patches
+                    set color black
+                    set size ( 1 / scale * dim ) * scale * 5
+                    let s-shapes [ ]
+                    let str 0
+                    let nd 0
+                    ifelse u < ETA
+                    [ set str u set nd ETA]
+                    [ set str ETA set nd u]
+                    while [ str <= nd]
+                     [ set s-shapes lput str s-shapes
+                       set str str + 1 ]
+                    set td floor ( random-td-rayleigh random-float 1 one-of s-shapes )
+                    set heuri random 5
+                    set ini patch-here
+                    set goal patch-here
+                  ]
+
+  ask cars [ move-to one-of street-patches
+             set color magenta
+             set size ( 1 / scale * dim ) * scale * 5
+             let s-shapes [ ]
+                    let str 0
+                    let nd 0
+                    ifelse u < ETA
+                    [ set str u set nd ETA]
+                    [ set str ETA set nd u]
+                    while [ str <= nd]
+                     [ set s-shapes lput str s-shapes
+                       set str str + 1 ]
+             set td floor (random-td-rayleigh random-float 1 one-of s-shapes)
+             ;if td < 5 [ set td random one-of s-shapes ]
+             set heuri random 5
+             set ini patch-here
+             set goal patch-here
+             ;set shape "car"
+           ]
+  let p round ( %-of-handicap * count pedestrians / 100 )
+  ask n-of p pedestrians [ set handicap true set speed speed * 0.5 ]
+  set pop-kids count kids
+  set pop-teens count teens
+  set pop-adults count adults
+  set pop-elders count elders
+  set pop-cars count cars
+  update-text
+  if movie? [vid:record-view];[movie-grab-interface];
+  output-print (word "Population data: " timer " sec.")
+  set-current-plot "Preparation time"
+  histogram [td] of turtles
+end
+
+;;************************************************************************************************
+;; MAIN PROGRAM
+;;************************************************************************************************ MAIN PROG. (GO)
+
+to go
+if ticks = 0 [reset-timer no-display]
+ask turtles
+[ t.decide-to-start
+  t.decide-shelter
+  t.search-road
+  ifelse breed != cars
+  [ t.follow-path ]
+  [ repeat 5 [ t.follow-path] ]
+  t.search-shelter-route
+]
+if tsunami? [if ticks >= (65 * 60) [tsunami-run]  ]
+outputs
+update-text
+if ticks mod movie-interval = 0 and movie? [vid:record-view];[movie-grab-interface];
+if ticks mod (10 * 60) = 0 and snapshots? [do-snapshots]
+if ticks mod (5 * 60) = 0 and snapshots? [ display export-interface (word "Model_" run-number "_K" ticks ".png") no-display ]
+tick
+do-plots
+if ticks = (TS * 60)
+   [ output-print (word "Total time:" timer " sec.")
+     if output-files?
+       [ let dir-temp (word pathdir:get-model-path "//Output")
+         set-current-directory dir-temp
+         let name (word "Safe_" run-number ".csv")
+         export-plot "Safe" name
+         set name (word "Casualty_" run-number ".csv")
+         export-plot "Casualty" name
+         ;set name "Monitor.csv"
+         ;export-output name
+         set name (word "TEBs_" run-number ".csv")
+         export-plot "TEBs" name
+         set-current-directory pathdir:get-model-path
+       ]
+       if movie? [vid:record-view let name (word movie-name ETA ".mp4") vid:save-recording name];[movie-grab-interface movie-close];
+       display
+       export-interface (word "Model_" run-number "_K" ticks ".png")
+       do-snapshots
+       no-display
+       stop
+    ]
+
+end
+
+;;************************************************************************************************ START DECISION
+
+to t.decide-to-start
+if stage = 0 and ( ticks = ( td * 60 ) ); or ticks = (62 * 60) )
+                  [ set stage 1
+                    if breed = kids [ set decided-kids decided-kids + 1]
+                    if breed = teens [ set decided-teens decided-teens + 1]
+                    if breed = adults [ set decided-adults decided-adults + 1]
+                    if breed = elders [ set decided-elders decided-elders + 1]
+                    if breed = cars [ set decided-cars decided-cars + 1 ]
+                   ]
+end
+
+;;************************************************************************************************ SHELTER DECISION
+
+to t.decide-shelter
+if stage = 1 [ ifelse random-shelter?
+                 [ set goal one-of teb-patches ]
+                 [ set goal one-of teb-patches with-min [distance myself] ]
+               ifelse breed != cars
+                 [ set stage 2 ]
+                 [ if random-float 1 < 0.68 ;this means 68% probability of true
+                   [ ifelse random-shelter?
+                     [ set goal one-of exit-patches ]
+                     [ set goal one-of exit-patches with-min [distance myself] ]
+                     set stage 4
+                   ]
+                 ]
+              ]
+end
+
+;;************************************************************************************************ ROAD SEARCH
+
+to t.search-road
+if stage = 2 [ let road-1 distance min-one-of patches with [pcolor = green] [distance myself]
+               let road-2 distance min-one-of exit-patches [distance myself]
+               let road nobody
+               ifelse road-1 < road-2
+                  [ set road min-one-of patches with [pcolor = green] [distance myself] set stage 3]
+                  [ set road min-one-of exit-patches [distance myself]
+                    set goal road
+                    set stage 5 ]
+               set path Astar patch-here road white 4
+             ]
+end
+
+;;************************************************************************************************ MOVE
+
+to t.follow-path
+if stage = 3 [ ifelse not empty? path
+               [ let next first path
+                 face next
+                 if r.topology?-to-street next
+                 [ fd adjust-speed ]
+                 if patch-here = next
+                 [ set path but-first path ]
+               ]
+               [ set stage 4 ]
+]
+
+if stage = 5 [ ifelse not empty? path
+               [ let next first path
+                 face next
+                 if r.topology?-on-street next
+                 [ fd adjust-speed ]
+                 if patch-here = next
+                 [ set path but-first path ]
+               ]
+               [ if patch-here = goal [ if breed = kids [set safe-kids safe-kids + 1]
+                                        if breed = teens [set safe-teens safe-teens + 1]
+                                        if breed = adults [set safe-adults safe-adults + 1]
+                                        if breed = elders [set safe-elders safe-elders + 1]
+                                        if breed = cars [ set safe-cars safe-cars + 1 ]
+                                        adjust-teb-capacity
+                                        export-record
+                                        die ]
+               ]
+]
+end
+
+;;************************************************************************************************ SHELTER SEARCH
+
+to t.search-shelter-route
+  if stage = 4 [ set path [ ]
+                 if breed = cars  ; --> correcting a pedestrian bridge, this should be corrected with a street shape for car and street shape for pedestrians
+                 [ ask patch 164 -132 [ set pcolor white]
+                   ask patch 165 -131 [ set pcolor white]
+                   ask patch 165 -132 [ set pcolor white]
+                   ask patch 166 -131 [ set pcolor white]
+                   ask patch 166 -132 [ set pcolor white]
+                 ]
+                 set path Astar patch-here goal green 4
+                 set L length path
+                 set stage 5
+                 if breed = cars
+                 [ ask patch 164 -132 [ set pcolor green]
+                   ask patch 165 -131 [ set pcolor green]
+                   ask patch 165 -132 [ set pcolor green]
+                   ask patch 166 -131 [ set pcolor green]
+                   ask patch 166 -132 [ set pcolor green]
+                 ]
+               ]
+end
+
+;;************************************************************************************************
+;;************************************************************************************************ REPORTERS
+
+to-report adjust-speed
+let s 0
+ifelse breed != cars
+[ let pedestrians (turtle-set other kids in-cone ( 5 / scale) 60 other teens in-cone ( 5 / scale) 60 other adults in-cone ( 5 / scale) 60 other elders in-cone ( 5 / scale) 60)
+  let p count pedestrians with [td > [td] of self]
+  let a (((pi / 3) * 5 ^ 2) / 2)
+  let d p / a
+  set s precision ((1 / SQRT(2 * PI * 0.3 ^ 2 )) * EXP(-((d - 0) ^ 2) / (2 * 0.3 ^ 2))) 2
+  if breed = kids [ set s 0.8 * s ]
+  if breed = elders [ set s 0.7 * s ]
+  if handicap = true [ set s s * 0.5 ]
+]
+[ let ahead-cars (turtle-set other cars in-cone ( 10 / scale) 60 )
+  let p count ahead-cars with [td <= [td] of self ]
+  let a (((pi / 3) * 10 ^ 2) / 2)
+  let d p / a
+  set s precision ((1 / SQRT(2 * PI * 0.047 ^ 2 )) * EXP(-((d - 0) ^ 2) / (2 * 0.047 ^ 2)) / 5.0 ) 2  ;/5.0 because is repeated 5 times every second of computation
+]
+set s s / scale
+report s
+end
+
+to-report r.topology?-on-street [next]
+ifelse ( breed != cars )
+ [ ;let pedestrians (turtle-set other kids-on next other teens-on next other adults-on next other elders-on next)   ;not include cars pedestrians in sidewalk
+   let pedestrians (turtle-set other kids in-cone ( 5 / scale) 60 other teens in-cone ( 5 / scale) 60 other adults in-cone ( 5 / scale) 60 other elders in-cone ( 5 / scale) 60)
+   ifelse next != nobody and count pedestrians with [td <= [td] of self and next != patch-here] < Cmax-ped
+     [ set color black report true  ]
+     [ ;output-print (word self " blocked at " patch-here)
+       set color white stamp
+       report false ]
+ ]
+ [ let ahead-cars (turtle-set other cars in-cone (10 / scale) 60)
+   ifelse next != nobody and count ahead-cars with [td <= [td] of self and next != patch-here] < Cmax-car ;not include pedestrians cars in road
+     [ set color magenta report true  ]
+     [ ;output-print (word self " blocked at " patch-here)
+       set color white stamp
+       report false ]
+ ]
+end
+
+;;************************************************************************************************
+
+to-report r.topology?-to-street [next]
+   let pedestrians (turtle-set other kids in-cone ( 5 / scale) 60 other teens in-cone ( 5 / scale) 60 other adults in-cone ( 5 / scale) 60 other elders in-cone ( 5 / scale) 60)
+   ifelse next != nobody and count pedestrians with [td <= [td] of self and next != patch-here] < Cmax-ped
+     [ set color black report true  ]
+     [ ;output-print (word self " blocked at " patch-here)
+       set color white stamp
+       report false ]
+end
+
+;;************************************************************************************************
+
+to do-snapshots
+let dir-temp (word pathdir:get-model-path "//Output")
+set-current-directory dir-temp
+let name (word run-number "K_" ticks ".png")
+export-view name
+set-current-directory pathdir:get-model-path
+end
+
+;;************************************************************************************************
+
+to adjust-teb-capacity
+ifelse not member? patch-here exit-patches
+[ let new-teb [ ]
+  let pos 0
+  foreach teb-capacity
+  [ t -> if goal = item 0 t
+     [ let cap item 1 t
+       ifelse breed = cars
+       [ set cap cap + 4 ]
+       [ set cap cap + 1 ]
+       set new-teb replace-item 1 t cap
+       set pos position t teb-capacity
+     ]
+  ]
+  set teb-capacity replace-item pos teb-capacity new-teb
+]
+[ let new-exit [ ]
+  let pos 0
+  foreach exit-capacity
+  [ x -> if goal = item 0 x
+     [ let cap item 1 x
+       ifelse breed = cars
+       [ set cap cap + 4 ]
+       [ set cap cap + 1 ]
+       set new-exit replace-item 1 x cap
+       set pos position x exit-capacity
+     ]
+  ]
+  set exit-capacity replace-item pos exit-capacity new-exit
+]
+end
+
+;;************************************************************************************************
+
+to update-text
+if scale = 5
+[ ask patch 185 -210 [set plabel title]
+  ask patch 185 -220 [set plabel (word "TIME: " round (ticks / 60) " min." )]
+]
+if scale = 2
+[ ask patch 645 -515 [set plabel title]
+  ask patch 645 -535 [set plabel (word "TIME: " round (ticks / 60) " min." )]
+]
+end
+
+;;************************************************************************************************
+
+to-report clock
+let minutes floor (ticks / (60 ))
+let seconds floor (((ticks / (60 )) - (floor (ticks / (60 )))) * (60))
+report (word  minutes " min. " seconds " secs.")
+end
+
+;;************************************************************************************************
+
+to do-plots
+set-current-plot "Decision"
+if pop-kids > 0
+[ set-current-plot-pen "kids"
+  plot (decided-kids / pop-kids) * 100
+]
+if pop-teens > 0
+[ set-current-plot-pen "teens"
+  plot (decided-teens / pop-teens) * 100
+]
+if pop-adults > 0
+[ set-current-plot-pen "adults"
+  plot (decided-adults / pop-adults) * 100
+]
+if pop-elders > 0
+[ set-current-plot-pen "elders"
+  plot (decided-elders / pop-elders) * 100
+]
+if pop-cars > 0
+[ set-current-plot-pen "cars"
+  plot (decided-cars / pop-cars) * 100
+]
+
+set-current-plot "Safe"
+if pop-kids > 0
+[ set-current-plot-pen "kids"
+  plot (safe-kids / pop-kids) * 100
+]
+if pop-teens > 0
+[ set-current-plot-pen "teens"
+  plot (safe-teens / pop-teens) * 100
+]
+if pop-adults > 0
+[ set-current-plot-pen "adults"
+  plot (safe-adults / pop-adults) * 100
+]
+if pop-elders > 0
+[ set-current-plot-pen "elders"
+  plot (safe-elders / pop-elders) * 100
+]
+if pop-cars > 0
+[ set-current-plot-pen "cars"
+  plot (safe-cars / pop-cars) * 100
+]
+
+set-current-plot "Casualty"
+if pop-kids > 0
+[ set-current-plot-pen "kids"
+  plot (casualty-kids / pop-kids) * 100
+]
+if pop-teens > 0
+[ set-current-plot-pen "teens"
+  plot (casualty-teens / pop-teens) * 100
+]
+if pop-adults > 0
+[ set-current-plot-pen "adults"
+  plot (casualty-adults / pop-adults) * 100
+]
+if pop-elders > 0
+[ set-current-plot-pen "elders"
+  plot (casualty-elders / pop-elders) * 100
+]
+if pop-cars > 0
+[ set-current-plot-pen "cars"
+  plot (casualty-cars / pop-cars) * 100
+]
+
+set-current-plot "TEBs"
+set-current-plot-pen "TEB#1_1"
+plot (item 1 item 0 teb-capacity)
+set-current-plot-pen "TEB#1_2"
+plot (item 1 item 1 teb-capacity)
+;set-current-plot-pen "TEB#2"
+;plot (item 1 item 2 teb-capacity)
+set-current-plot-pen "Exit#1"
+plot (item 1 item 0 exit-capacity)
+set-current-plot-pen "Exit#2"
+plot (item 1 item 1 exit-capacity)
+end
+
+;;************************************************************************************************
+
+to outputs
+ask cars [ if [zt] of patch-here > 0.50 [ set casualty-cars casualty-cars + 1      ;(Suga, 1995 in Yasuda, 2004)
+                                         set color red
+                                         stamp
+                                         export-record
+                                         die ] ]
+let pedestrians (turtle-set kids teens adults elders)
+ask pedestrians [ let HZ [zt] of patch-here
+                  if HZ >= 0
+                  [ ifelse HZ <= 0.85
+                    [ let z -12.37 + 22.036 * [zt] of patch-here + 11.517 * 2.0  ;average velocity 1.80m/s from TUNAMI
+                      let fz 1 / ( 1 + exp (15.48 - z) )
+                      if fz > 0.50
+                      [ if breed = kids [ set casualty-kids casualty-kids + 1 ]
+                        if breed = teens [set casualty-teens casualty-teens + 1]
+                        if breed = adults [set casualty-adults casualty-adults + 1]
+                        if breed = elders [set casualty-elders casualty-elders + 1]
+                        set color red
+                        stamp
+                        export-record
+                        die
+                      ]
+                    ]
+                    [ if breed = kids [ set casualty-kids casualty-kids + 1 ]
+                      if breed = teens [set casualty-teens casualty-teens + 1]
+                      if breed = adults [set casualty-adults casualty-adults + 1]
+                      if breed = elders [set casualty-elders casualty-elders + 1]
+                      set color red
+                      stamp
+                      export-record
+                      die
+                    ]
+                  ]
+                ]
+end
+
+;;************************************************************************************************
+
+;to output-shelters ;turtle procedure
+;  file-close-all
+;  let dir-temp word pathdir:get-model "//Output"
+;  set-current-directory dir-temp
+;  file-open "Shelter-Report01.txt" ;(word "Exit-Report" run-number ".txt")
+;  file-print (word who " " e.shelter-pref)
+;  file-close
+;  set-current-directory pathdir:get-model
+;end
+
+to export-record ;turtle procedure
+  let dir-temp (word pathdir:get-model-path "//Output")
+  set-current-directory dir-temp
+  file-close-all
+  file-open (word "Evacuation-Record" run-number ".txt")
+  ifelse [color] of self = red
+  [ set stage 1 ]
+  [ set stage 0 ]
+  if path = 0
+  [set path [ ]]
+  file-print (word self "," [pxcor] of ini "," [pycor] of ini "," [pxcor] of goal "," [pycor] of goal "," [pxcor] of patch-here "," [pycor] of patch-here "," L "," (L - length path) "," td ","
+                   precision (ticks / 60) 1 "," [zt] of patch-here "," stage ) ;stage=0 safe stage=1 casualty
+  file-close
+  set-current-directory pathdir:get-model-path
+end
+
+;;************************************************************************************************
+
+to tsunami-run
+   let dir-temp word pathdir:get-model-path "//TsunamiDB"
+   set-current-directory dir-temp
+   set tsunami-file-name (word "out" tsu-counter ".asc")
+
+;   ifelse tsu-counter < 10
+;    [ set tsunami-file-name (word "out4000" tsu-counter ".asc") ]
+;    [ ifelse tsu-counter >= 10 and tsu-counter < 100
+;       [ set tsunami-file-name (word "out400" tsu-counter ".asc")]
+;       [ set tsunami-file-name (word "out40" tsu-counter ".asc") ]
+;    ]
+
+   let inundation gis:load-dataset tsunami-file-name
+   gis:set-world-envelope-ds (gis:envelope-of inundation)
+   gis:apply-raster inundation zt
+   ask patches with [zt > 0] [ set pcolor scale-color blue zt 20 -20 ]
+   display
+   no-display
+   set tsu-counter tsu-counter + 1 ;because data is at 0.5s output
+   set-current-directory pathdir:get-model-path
+end
+
+]]></code>
+  <widgets>
+    <view x="461" wrappingAllowedX="false" y="10" frameRate="30.0" minPycor="-229" height="694" showTickCounter="true" patchSize="3.0" fontSize="10" wrappingAllowedY="false" width="796" tickCounterLabel="ticks" maxPycor="0" updateMode="1" maxPxcor="263" minPxcor="0"></view>
+    <button x="228" y="55" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="63">go</button>
+    <input x="8" multiline="false" y="185" height="60" variable="#-of-adults" type="number" width="100">2723.0</input>
+    <input x="8" multiline="false" y="120" height="60" variable="#-of-kids" type="number" width="100">0.0</input>
+    <input x="113" multiline="false" y="120" height="60" variable="#-of-teens" type="number" width="100">0.0</input>
+    <input x="113" multiline="false" y="185" height="60" variable="#-of-elders" type="number" width="100">0.0</input>
+    <input x="218" multiline="false" y="122" height="60" variable="%-of-handicap" type="number" width="100">0.0</input>
+    <button x="217" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="74">reload</button>
+    <button x="151" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="63">setup</button>
+    <switch x="10" y="360" height="40" on="true" variable="movie?" width="147" display="movie?"></switch>
+    <input x="8" multiline="false" y="55" height="60" variable="title" type="string" width="217">"Arahama Model"</input>
+    <input x="10" multiline="false" y="405" height="60" variable="movie-name" type="string" width="100">Model</input>
+    <switch x="324" y="230" height="40" on="false" variable="random-shelter?" width="132" display="random-shelter?"></switch>
+    <input x="218" multiline="false" y="183" height="62" variable="#-of-cars" type="number" width="100">50.0</input>
+    <switch x="324" y="275" height="40" on="true" variable="tsunami?" width="132" display="tsunami?"></switch>
+    <switch x="10" y="315" height="40" on="true" variable="output-files?" width="149" display="output-files?"></switch>
+    <plot x="1272" autoPlotX="true" yMax="100.0" autoPlotY="true" yAxis="%safe" y="336" xMin="0.0" height="271" legend="true" xMax="1800.0" yMin="0.0" width="321" xAxis="time (s)" display="Safe">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="kids" color="-955883" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="teens" color="-6459832" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="adults" color="-10899396" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="elders" color="-13345367" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="cars" color="-5825686" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+    </plot>
+    <plot x="1273" autoPlotX="true" yMax="100.0" autoPlotY="true" yAxis="%casualty" y="612" xMin="0.0" height="259" legend="true" xMax="1800.0" yMin="0.0" width="320" xAxis="time (s)" display="Casualty">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="kids" color="-955883" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="teens" color="-6459832" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="adults" color="-10899396" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="elders" color="-13345367" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="cars" color="-5825686" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+    </plot>
+    <switch x="162" y="319" height="40" on="true" variable="snapshots?" width="134" display="snapshots?"></switch>
+    <input x="10" multiline="false" y="470" height="60" variable="movie-frame-rate" type="number" width="100">10.0</input>
+    <input x="115" multiline="false" y="405" height="60" variable="movie-interval" type="number" width="100">5.0</input>
+    <note x="222" y="406" backgroundDark="0" fontSize="11" width="127" markdown="false" height="42" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(Only v 4.1) movie exports view every "movie-interval" seconds</note>
+    <note x="116" y="477" backgroundDark="0" fontSize="11" width="176" markdown="false" height="42" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">(Only v 4.1) when making movie "movie-frame-rate" numbers of frames are compress in one second of movie</note>
+    <plot x="1272" autoPlotX="true" yMax="100.0" autoPlotY="true" yAxis="%decision" y="51" xMin="0.0" height="280" legend="true" xMax="1800.0" yMin="0.0" width="321" xAxis="time (s)" display="Decision">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="kids" color="-955883" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="teens" color="-6459832" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="adults" color="-10899396" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="elders" color="-13345367" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="cars" color="-5825686" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+    </plot>
+    <note x="1382" y="20" backgroundDark="0" fontSize="11" width="80" markdown="false" height="18" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">OUTPUT PLOTS</note>
+    <input x="219" multiline="false" y="246" height="60" variable="TS" type="number" width="100">70.0</input>
+    <plot x="10" autoPlotX="true" yMax="10.0" autoPlotY="true" yAxis="#evacs" y="535" xMin="0.0" height="175" legend="false" xMax="60.0" yMin="0.0" width="279" xAxis="t (min)" display="Preparation time">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="1" display="default" color="-16777216" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+    </plot>
+    <plot x="1598" autoPlotX="true" yMax="10.0" autoPlotY="true" yAxis="Capacity" y="53" xMin="0.0" height="219" legend="true" xMax="10.0" yMin="0.0" width="234" xAxis="time (s)" display="TEBs">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="TEB#1_1" color="-16777216" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="TEB#1_2" color="-7500403" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Exit#2" color="-955883" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Exit#1" color="-13345367" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+    </plot>
+    <monitor x="1599" precision="17" y="277" height="60" fontSize="11" width="100" display="Evacuated">safe-kids + safe-teens + safe-adults + safe-elders + (safe-cars * 4)</monitor>
+    <monitor x="1599" precision="17" y="342" height="60" fontSize="11" width="100" display="Casualties">casualty-kids + casualty-teens + casualty-adults + casualty-elders + (casualty-cars * 4)</monitor>
+    <input x="114" multiline="false" y="250" height="60" variable="ETA" type="number" width="100">67.0</input>
+    <monitor x="1704" precision="17" y="277" height="60" fontSize="11" width="100" display="Exit#1">(item 1 item 0 exit-capacity)</monitor>
+    <monitor x="1704" precision="17" y="342" height="60" fontSize="11" width="100" display="TEB#1">(item 1 item 0 teb-capacity) + (item 1 item 1 teb-capacity)</monitor>
+    <monitor x="1809" precision="17" y="320" height="60" fontSize="11" width="100" display="Exit#2">(item 1 item 1 exit-capacity)</monitor>
+    <input x="9" multiline="false" y="250" height="60" variable="u" type="number" width="100">7.0</input>
+    <input x="323" multiline="false" y="168" height="60" variable="run-number" type="number" width="100">0.0</input>
+    <output x="1599" y="407" height="428" fontSize="12" width="240"></output>
+    <note x="11" y="3" backgroundDark="0" fontSize="11" width="140" markdown="true" height="56" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">press SETUP only when open first time, then use RELOAD</note>
+  </widgets>
+  <info>## WHAT IS IT?
+
+This is TUNAMI-EVAC1 a loosly coupled model of the TUNAMI (Tohoku University Numerical Analysis Model for Investigation of Near-field tsunamis) and the Agent Based Model (ABM) of evacuation version 1 (EVAC1).
+The model was developed as a PHD course study at Tohoku University.
+
+## HOW IT WORKS
+
+GIS data is imported to the world space and population is created randomnly spaced distributed in buildings around the area of interest (AOI).
+The number of different type of population can be set, also vehicles and conditions of evacuation behavior.
+
+## HOW TO USE IT
+
+Input the number of elders, adults, teens, kids, handicap and vehciles in the AOI.
+Select a evacuation behavior curve "u"-"ETA"-"Ts"
+
+"u" is the mean of a Rayleigh distribution used to apply a start time of evacuation decision to each agent.
+"ETA" is the estimated tsunami arrival time (calculated probably from simulation)
+"Ts" is the total time of simulation in this model.
+
+## THINGS TO NOTICE
+
+This section could give some ideas of things for the user to notice while running the model.
+
+## THINGS TO TRY
+
+This section could give some ideas of things for the user to try to do (move sliders, switches, etc.) with the model.
+
+## EXTENDING THE MODEL
+
+This section could give some ideas of things to add or change in the procedures tab to make the model more complicated, detailed, accurate, etc.
+
+## NETLOGO FEATURES
+
+This section could point out any especially interesting or unusual features of NetLogo that the model makes use of, particularly in the Procedures tab.  It might also point out places where workarounds were needed because of missing features.
+
+## RELATED MODELS
+
+This section could give the names of models in the NetLogo Models Library or elsewhere which are of related interest.
+
+## CREDITS AND REFERENCES
+
+Developed by Erick Mas (c)2012</info>
+  <turtleShapes>
+    <shape name="default" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="5"></point>
+        <point x="40" y="250"></point>
+        <point x="150" y="205"></point>
+        <point x="260" y="250"></point>
+      </polygon>
+    </shape>
+    <shape name="airplane" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="0"></point>
+        <point x="135" y="15"></point>
+        <point x="120" y="60"></point>
+        <point x="120" y="105"></point>
+        <point x="15" y="165"></point>
+        <point x="15" y="195"></point>
+        <point x="120" y="180"></point>
+        <point x="135" y="240"></point>
+        <point x="105" y="270"></point>
+        <point x="120" y="285"></point>
+        <point x="150" y="270"></point>
+        <point x="180" y="285"></point>
+        <point x="210" y="270"></point>
+        <point x="165" y="240"></point>
+        <point x="180" y="180"></point>
+        <point x="285" y="195"></point>
+        <point x="285" y="165"></point>
+        <point x="180" y="105"></point>
+        <point x="180" y="60"></point>
+        <point x="165" y="15"></point>
+      </polygon>
+    </shape>
+    <shape name="arrow" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="0"></point>
+        <point x="0" y="150"></point>
+        <point x="105" y="150"></point>
+        <point x="105" y="293"></point>
+        <point x="195" y="293"></point>
+        <point x="195" y="150"></point>
+        <point x="300" y="150"></point>
+      </polygon>
+    </shape>
+    <shape name="bot" rotatable="true" editableColorIndex="6">
+      <circle x="30" y="30" marked="true" color="751909887" diameter="240" filled="true"></circle>
+    </shape>
+    <shape name="box" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="285"></point>
+        <point x="285" y="225"></point>
+        <point x="285" y="75"></point>
+        <point x="150" y="135"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="135"></point>
+        <point x="15" y="75"></point>
+        <point x="150" y="15"></point>
+        <point x="285" y="75"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="15" y="75"></point>
+        <point x="15" y="225"></point>
+        <point x="150" y="285"></point>
+        <point x="150" y="135"></point>
+      </polygon>
+      <line endX="150" startY="285" marked="false" color="255" endY="135" startX="150"></line>
+      <line endX="15" startY="135" marked="false" color="255" endY="75" startX="150"></line>
+      <line endX="285" startY="135" marked="false" color="255" endY="75" startX="150"></line>
+    </shape>
+    <shape name="bug" rotatable="true" editableColorIndex="0">
+      <circle x="96" y="182" marked="true" color="-1920102913" diameter="108" filled="true"></circle>
+      <circle x="110" y="127" marked="true" color="-1920102913" diameter="80" filled="true"></circle>
+      <circle x="110" y="75" marked="true" color="-1920102913" diameter="80" filled="true"></circle>
+      <line endX="80" startY="100" marked="true" color="-1920102913" endY="30" startX="150"></line>
+      <line endX="220" startY="100" marked="true" color="-1920102913" endY="30" startX="150"></line>
+    </shape>
+    <shape name="butterfly" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="165"></point>
+        <point x="209" y="199"></point>
+        <point x="225" y="225"></point>
+        <point x="225" y="255"></point>
+        <point x="195" y="270"></point>
+        <point x="165" y="255"></point>
+        <point x="150" y="240"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="165"></point>
+        <point x="89" y="198"></point>
+        <point x="75" y="225"></point>
+        <point x="75" y="255"></point>
+        <point x="105" y="270"></point>
+        <point x="135" y="255"></point>
+        <point x="150" y="240"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="139" y="148"></point>
+        <point x="100" y="105"></point>
+        <point x="55" y="90"></point>
+        <point x="25" y="90"></point>
+        <point x="10" y="105"></point>
+        <point x="10" y="135"></point>
+        <point x="25" y="180"></point>
+        <point x="40" y="195"></point>
+        <point x="85" y="194"></point>
+        <point x="139" y="163"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="162" y="150"></point>
+        <point x="200" y="105"></point>
+        <point x="245" y="90"></point>
+        <point x="275" y="90"></point>
+        <point x="290" y="105"></point>
+        <point x="290" y="135"></point>
+        <point x="275" y="180"></point>
+        <point x="260" y="195"></point>
+        <point x="215" y="195"></point>
+        <point x="162" y="165"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="150" y="255"></point>
+        <point x="135" y="225"></point>
+        <point x="120" y="150"></point>
+        <point x="135" y="120"></point>
+        <point x="150" y="105"></point>
+        <point x="165" y="120"></point>
+        <point x="180" y="150"></point>
+        <point x="165" y="225"></point>
+      </polygon>
+      <circle x="135" y="90" marked="false" color="255" diameter="30" filled="true"></circle>
+      <line endX="195" startY="105" marked="false" color="255" endY="60" startX="150"></line>
+      <line endX="105" startY="105" marked="false" color="255" endY="60" startX="150"></line>
+    </shape>
+    <shape name="car" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="300" y="180"></point>
+        <point x="279" y="164"></point>
+        <point x="261" y="144"></point>
+        <point x="240" y="135"></point>
+        <point x="226" y="132"></point>
+        <point x="213" y="106"></point>
+        <point x="203" y="84"></point>
+        <point x="185" y="63"></point>
+        <point x="159" y="50"></point>
+        <point x="135" y="50"></point>
+        <point x="75" y="60"></point>
+        <point x="0" y="150"></point>
+        <point x="0" y="165"></point>
+        <point x="0" y="225"></point>
+        <point x="300" y="225"></point>
+        <point x="300" y="180"></point>
+      </polygon>
+      <circle x="180" y="180" marked="false" color="255" diameter="90" filled="true"></circle>
+      <circle x="30" y="180" marked="false" color="255" diameter="90" filled="true"></circle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="162" y="80"></point>
+        <point x="132" y="78"></point>
+        <point x="134" y="135"></point>
+        <point x="209" y="135"></point>
+        <point x="194" y="105"></point>
+        <point x="189" y="96"></point>
+        <point x="180" y="89"></point>
+      </polygon>
+      <circle x="47" y="195" marked="true" color="-1920102913" diameter="58" filled="true"></circle>
+      <circle x="195" y="195" marked="true" color="-1920102913" diameter="58" filled="true"></circle>
+    </shape>
+    <shape name="circle" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+    </shape>
+    <shape name="circle 2" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+    </shape>
+    <shape name="cow" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="200" y="193"></point>
+        <point x="197" y="249"></point>
+        <point x="179" y="249"></point>
+        <point x="177" y="196"></point>
+        <point x="166" y="187"></point>
+        <point x="140" y="189"></point>
+        <point x="93" y="191"></point>
+        <point x="78" y="179"></point>
+        <point x="72" y="211"></point>
+        <point x="49" y="209"></point>
+        <point x="48" y="181"></point>
+        <point x="37" y="149"></point>
+        <point x="25" y="120"></point>
+        <point x="25" y="89"></point>
+        <point x="45" y="72"></point>
+        <point x="103" y="84"></point>
+        <point x="179" y="75"></point>
+        <point x="198" y="76"></point>
+        <point x="252" y="64"></point>
+        <point x="272" y="81"></point>
+        <point x="293" y="103"></point>
+        <point x="285" y="121"></point>
+        <point x="255" y="121"></point>
+        <point x="242" y="118"></point>
+        <point x="224" y="167"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="73" y="210"></point>
+        <point x="86" y="251"></point>
+        <point x="62" y="249"></point>
+        <point x="48" y="208"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="25" y="114"></point>
+        <point x="16" y="195"></point>
+        <point x="9" y="204"></point>
+        <point x="23" y="213"></point>
+        <point x="25" y="200"></point>
+        <point x="39" y="123"></point>
+      </polygon>
+    </shape>
+    <shape name="cylinder" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+    </shape>
+    <shape name="dot" rotatable="false" editableColorIndex="0">
+      <circle x="90" y="90" marked="true" color="-1920102913" diameter="120" filled="true"></circle>
+    </shape>
+    <shape name="face happy" rotatable="false" editableColorIndex="0">
+      <circle x="8" y="8" marked="true" color="-1920102913" diameter="285" filled="true"></circle>
+      <circle x="60" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <circle x="180" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="150" y="255"></point>
+        <point x="90" y="239"></point>
+        <point x="62" y="213"></point>
+        <point x="47" y="191"></point>
+        <point x="67" y="179"></point>
+        <point x="90" y="203"></point>
+        <point x="109" y="218"></point>
+        <point x="150" y="225"></point>
+        <point x="192" y="218"></point>
+        <point x="210" y="203"></point>
+        <point x="227" y="181"></point>
+        <point x="251" y="194"></point>
+        <point x="236" y="217"></point>
+        <point x="212" y="240"></point>
+      </polygon>
+    </shape>
+    <shape name="face neutral" rotatable="false" editableColorIndex="0">
+      <circle x="8" y="7" marked="true" color="-1920102913" diameter="285" filled="true"></circle>
+      <circle x="60" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <circle x="180" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <rectangle endX="240" startY="195" marked="false" color="255" endY="225" startX="60" filled="true"></rectangle>
+    </shape>
+    <shape name="face sad" rotatable="false" editableColorIndex="0">
+      <circle x="8" y="8" marked="true" color="-1920102913" diameter="285" filled="true"></circle>
+      <circle x="60" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <circle x="180" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="150" y="168"></point>
+        <point x="90" y="184"></point>
+        <point x="62" y="210"></point>
+        <point x="47" y="232"></point>
+        <point x="67" y="244"></point>
+        <point x="90" y="220"></point>
+        <point x="109" y="205"></point>
+        <point x="150" y="198"></point>
+        <point x="192" y="205"></point>
+        <point x="210" y="220"></point>
+        <point x="227" y="242"></point>
+        <point x="251" y="229"></point>
+        <point x="236" y="206"></point>
+        <point x="212" y="183"></point>
+      </polygon>
+    </shape>
+    <shape name="fish" rotatable="false" editableColorIndex="0">
+      <polygon color="-1" filled="true" marked="false">
+        <point x="44" y="131"></point>
+        <point x="21" y="87"></point>
+        <point x="15" y="86"></point>
+        <point x="0" y="120"></point>
+        <point x="15" y="150"></point>
+        <point x="0" y="180"></point>
+        <point x="13" y="214"></point>
+        <point x="20" y="212"></point>
+        <point x="45" y="166"></point>
+      </polygon>
+      <polygon color="-1" filled="true" marked="false">
+        <point x="135" y="195"></point>
+        <point x="119" y="235"></point>
+        <point x="95" y="218"></point>
+        <point x="76" y="210"></point>
+        <point x="46" y="204"></point>
+        <point x="60" y="165"></point>
+      </polygon>
+      <polygon color="-1" filled="true" marked="false">
+        <point x="75" y="45"></point>
+        <point x="83" y="77"></point>
+        <point x="71" y="103"></point>
+        <point x="86" y="114"></point>
+        <point x="166" y="78"></point>
+        <point x="135" y="60"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="30" y="136"></point>
+        <point x="151" y="77"></point>
+        <point x="226" y="81"></point>
+        <point x="280" y="119"></point>
+        <point x="292" y="146"></point>
+        <point x="292" y="160"></point>
+        <point x="287" y="170"></point>
+        <point x="270" y="195"></point>
+        <point x="195" y="210"></point>
+        <point x="151" y="212"></point>
+        <point x="30" y="166"></point>
+      </polygon>
+      <circle x="215" y="106" marked="false" color="255" diameter="30" filled="true"></circle>
+    </shape>
+    <shape name="flag" rotatable="false" editableColorIndex="0">
+      <rectangle endX="75" startY="15" marked="true" color="-1920102913" endY="300" startX="60" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="90" y="150"></point>
+        <point x="270" y="90"></point>
+        <point x="90" y="30"></point>
+      </polygon>
+      <line endX="90" startY="135" marked="true" color="-1920102913" endY="135" startX="75"></line>
+      <line endX="90" startY="45" marked="true" color="-1920102913" endY="45" startX="75"></line>
+    </shape>
+    <shape name="flower" rotatable="false" editableColorIndex="0">
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="135" y="120"></point>
+        <point x="165" y="165"></point>
+        <point x="180" y="210"></point>
+        <point x="180" y="240"></point>
+        <point x="150" y="300"></point>
+        <point x="165" y="300"></point>
+        <point x="195" y="240"></point>
+        <point x="195" y="195"></point>
+        <point x="165" y="135"></point>
+      </polygon>
+      <circle x="85" y="132" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="130" y="147" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="192" y="85" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="85" y="40" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="177" y="40" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="177" y="132" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="70" y="85" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="130" y="25" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="96" y="51" marked="true" color="-1920102913" diameter="108" filled="true"></circle>
+      <circle x="113" y="68" marked="false" color="255" diameter="74" filled="true"></circle>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="189" y="233"></point>
+        <point x="219" y="188"></point>
+        <point x="249" y="173"></point>
+        <point x="279" y="188"></point>
+        <point x="234" y="218"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="180" y="255"></point>
+        <point x="150" y="210"></point>
+        <point x="105" y="210"></point>
+        <point x="75" y="240"></point>
+        <point x="135" y="240"></point>
+      </polygon>
+    </shape>
+    <shape name="house" rotatable="false" editableColorIndex="0">
+      <rectangle endX="255" startY="120" marked="true" color="-1920102913" endY="285" startX="45" filled="true"></rectangle>
+      <rectangle endX="180" startY="210" marked="false" color="255" endY="285" startX="120" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="15" y="120"></point>
+        <point x="150" y="15"></point>
+        <point x="285" y="120"></point>
+      </polygon>
+      <line endX="270" startY="120" marked="false" color="255" endY="120" startX="30"></line>
+    </shape>
+    <shape name="leaf" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="210"></point>
+        <point x="135" y="195"></point>
+        <point x="120" y="210"></point>
+        <point x="60" y="210"></point>
+        <point x="30" y="195"></point>
+        <point x="60" y="180"></point>
+        <point x="60" y="165"></point>
+        <point x="15" y="135"></point>
+        <point x="30" y="120"></point>
+        <point x="15" y="105"></point>
+        <point x="40" y="104"></point>
+        <point x="45" y="90"></point>
+        <point x="60" y="90"></point>
+        <point x="90" y="105"></point>
+        <point x="105" y="120"></point>
+        <point x="120" y="120"></point>
+        <point x="105" y="60"></point>
+        <point x="120" y="60"></point>
+        <point x="135" y="30"></point>
+        <point x="150" y="15"></point>
+        <point x="165" y="30"></point>
+        <point x="180" y="60"></point>
+        <point x="195" y="60"></point>
+        <point x="180" y="120"></point>
+        <point x="195" y="120"></point>
+        <point x="210" y="105"></point>
+        <point x="240" y="90"></point>
+        <point x="255" y="90"></point>
+        <point x="263" y="104"></point>
+        <point x="285" y="105"></point>
+        <point x="270" y="120"></point>
+        <point x="285" y="135"></point>
+        <point x="240" y="165"></point>
+        <point x="240" y="180"></point>
+        <point x="270" y="195"></point>
+        <point x="240" y="210"></point>
+        <point x="180" y="210"></point>
+        <point x="165" y="195"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="195"></point>
+        <point x="135" y="240"></point>
+        <point x="120" y="255"></point>
+        <point x="105" y="255"></point>
+        <point x="105" y="285"></point>
+        <point x="135" y="285"></point>
+        <point x="165" y="240"></point>
+        <point x="165" y="195"></point>
+      </polygon>
+    </shape>
+    <shape name="line" rotatable="true" editableColorIndex="0">
+      <line endX="150" startY="0" marked="true" color="-1920102913" endY="300" startX="150"></line>
+    </shape>
+    <shape name="line half" rotatable="true" editableColorIndex="0">
+      <line endX="150" startY="0" marked="true" color="-1920102913" endY="150" startX="150"></line>
+    </shape>
+    <shape name="pentagon" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="15"></point>
+        <point x="15" y="120"></point>
+        <point x="60" y="285"></point>
+        <point x="240" y="285"></point>
+        <point x="285" y="120"></point>
+      </polygon>
+    </shape>
+    <shape name="person" rotatable="false" editableColorIndex="0">
+      <circle x="110" y="5" marked="true" color="-1920102913" diameter="80" filled="true"></circle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="105" y="90"></point>
+        <point x="120" y="195"></point>
+        <point x="90" y="285"></point>
+        <point x="105" y="300"></point>
+        <point x="135" y="300"></point>
+        <point x="150" y="225"></point>
+        <point x="165" y="300"></point>
+        <point x="195" y="300"></point>
+        <point x="210" y="285"></point>
+        <point x="180" y="195"></point>
+        <point x="195" y="90"></point>
+      </polygon>
+      <rectangle endX="172" startY="79" marked="true" color="-1920102913" endY="94" startX="127" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="195" y="90"></point>
+        <point x="240" y="150"></point>
+        <point x="225" y="180"></point>
+        <point x="165" y="105"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="105" y="90"></point>
+        <point x="60" y="150"></point>
+        <point x="75" y="180"></point>
+        <point x="135" y="105"></point>
+      </polygon>
+    </shape>
+    <shape name="plant" rotatable="false" editableColorIndex="0">
+      <rectangle endX="165" startY="90" marked="true" color="-1920102913" endY="300" startX="135" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="255"></point>
+        <point x="90" y="210"></point>
+        <point x="45" y="195"></point>
+        <point x="75" y="255"></point>
+        <point x="135" y="285"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="165" y="255"></point>
+        <point x="210" y="210"></point>
+        <point x="255" y="195"></point>
+        <point x="225" y="255"></point>
+        <point x="165" y="285"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="180"></point>
+        <point x="90" y="135"></point>
+        <point x="45" y="120"></point>
+        <point x="75" y="180"></point>
+        <point x="135" y="210"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="165" y="180"></point>
+        <point x="165" y="210"></point>
+        <point x="225" y="180"></point>
+        <point x="255" y="120"></point>
+        <point x="210" y="135"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="105"></point>
+        <point x="90" y="60"></point>
+        <point x="45" y="45"></point>
+        <point x="75" y="105"></point>
+        <point x="135" y="135"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="165" y="105"></point>
+        <point x="165" y="135"></point>
+        <point x="225" y="105"></point>
+        <point x="255" y="45"></point>
+        <point x="210" y="60"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="90"></point>
+        <point x="120" y="45"></point>
+        <point x="150" y="15"></point>
+        <point x="180" y="45"></point>
+        <point x="165" y="90"></point>
+      </polygon>
+    </shape>
+    <shape name="sheep" rotatable="false" editableColorIndex="0">
+      <rectangle endX="180" startY="225" marked="true" color="-1920102913" endY="285" startX="151" filled="true"></rectangle>
+      <rectangle endX="75" startY="225" marked="true" color="-1920102913" endY="285" startX="47" filled="true"></rectangle>
+      <rectangle endX="210" startY="75" marked="true" color="-1920102913" endY="225" startX="15" filled="true"></rectangle>
+      <circle x="135" y="75" marked="true" color="-1920102913" diameter="150" filled="true"></circle>
+      <circle x="165" y="76" marked="false" color="255" diameter="116" filled="true"></circle>
+    </shape>
+    <shape name="square" rotatable="false" editableColorIndex="0">
+      <rectangle endX="270" startY="30" marked="true" color="-1920102913" endY="270" startX="30" filled="true"></rectangle>
+    </shape>
+    <shape name="square 2" rotatable="false" editableColorIndex="0">
+      <rectangle endX="270" startY="30" marked="true" color="-1920102913" endY="270" startX="30" filled="true"></rectangle>
+      <rectangle endX="240" startY="60" marked="false" color="255" endY="240" startX="60" filled="true"></rectangle>
+    </shape>
+    <shape name="star" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="151" y="1"></point>
+        <point x="185" y="108"></point>
+        <point x="298" y="108"></point>
+        <point x="207" y="175"></point>
+        <point x="242" y="282"></point>
+        <point x="151" y="216"></point>
+        <point x="59" y="282"></point>
+        <point x="94" y="175"></point>
+        <point x="3" y="108"></point>
+        <point x="116" y="108"></point>
+      </polygon>
+    </shape>
+    <shape name="target" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+      <circle x="60" y="60" marked="true" color="-1920102913" diameter="180" filled="true"></circle>
+      <circle x="90" y="90" marked="false" color="255" diameter="120" filled="true"></circle>
+      <circle x="120" y="120" marked="true" color="-1920102913" diameter="60" filled="true"></circle>
+    </shape>
+    <shape name="tree" rotatable="false" editableColorIndex="0">
+      <circle x="118" y="3" marked="true" color="-1920102913" diameter="94" filled="true"></circle>
+      <rectangle endX="180" startY="195" marked="false" color="-1653716737" endY="300" startX="120" filled="true"></rectangle>
+      <circle x="65" y="21" marked="true" color="-1920102913" diameter="108" filled="true"></circle>
+      <circle x="116" y="41" marked="true" color="-1920102913" diameter="127" filled="true"></circle>
+      <circle x="45" y="90" marked="true" color="-1920102913" diameter="120" filled="true"></circle>
+      <circle x="104" y="74" marked="true" color="-1920102913" diameter="152" filled="true"></circle>
+    </shape>
+    <shape name="triangle" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="30"></point>
+        <point x="15" y="255"></point>
+        <point x="285" y="255"></point>
+      </polygon>
+    </shape>
+    <shape name="triangle 2" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="30"></point>
+        <point x="15" y="255"></point>
+        <point x="285" y="255"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="151" y="99"></point>
+        <point x="225" y="223"></point>
+        <point x="75" y="224"></point>
+      </polygon>
+    </shape>
+    <shape name="truck" rotatable="false" editableColorIndex="0">
+      <rectangle endX="195" startY="45" marked="true" color="-1920102913" endY="187" startX="4" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="296" y="193"></point>
+        <point x="296" y="150"></point>
+        <point x="259" y="134"></point>
+        <point x="244" y="104"></point>
+        <point x="208" y="104"></point>
+        <point x="207" y="194"></point>
+      </polygon>
+      <rectangle endX="195" startY="60" marked="false" color="-1" endY="105" startX="195" filled="true"></rectangle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="238" y="112"></point>
+        <point x="252" y="141"></point>
+        <point x="219" y="141"></point>
+        <point x="218" y="112"></point>
+      </polygon>
+      <circle x="234" y="174" marked="false" color="255" diameter="42" filled="true"></circle>
+      <rectangle endX="214" startY="185" marked="true" color="-1920102913" endY="194" startX="181" filled="true"></rectangle>
+      <circle x="144" y="174" marked="false" color="255" diameter="42" filled="true"></circle>
+      <circle x="24" y="174" marked="false" color="255" diameter="42" filled="true"></circle>
+      <circle x="24" y="174" marked="true" color="-1920102913" diameter="42" filled="false"></circle>
+      <circle x="144" y="174" marked="true" color="-1920102913" diameter="42" filled="false"></circle>
+      <circle x="234" y="174" marked="true" color="-1920102913" diameter="42" filled="false"></circle>
+    </shape>
+    <shape name="turtle" rotatable="true" editableColorIndex="0">
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="215" y="204"></point>
+        <point x="240" y="233"></point>
+        <point x="246" y="254"></point>
+        <point x="228" y="266"></point>
+        <point x="215" y="252"></point>
+        <point x="193" y="210"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="195" y="90"></point>
+        <point x="225" y="75"></point>
+        <point x="245" y="75"></point>
+        <point x="260" y="89"></point>
+        <point x="269" y="108"></point>
+        <point x="261" y="124"></point>
+        <point x="240" y="105"></point>
+        <point x="225" y="105"></point>
+        <point x="210" y="105"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="105" y="90"></point>
+        <point x="75" y="75"></point>
+        <point x="55" y="75"></point>
+        <point x="40" y="89"></point>
+        <point x="31" y="108"></point>
+        <point x="39" y="124"></point>
+        <point x="60" y="105"></point>
+        <point x="75" y="105"></point>
+        <point x="90" y="105"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="132" y="85"></point>
+        <point x="134" y="64"></point>
+        <point x="107" y="51"></point>
+        <point x="108" y="17"></point>
+        <point x="150" y="2"></point>
+        <point x="192" y="18"></point>
+        <point x="192" y="52"></point>
+        <point x="169" y="65"></point>
+        <point x="172" y="87"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="85" y="204"></point>
+        <point x="60" y="233"></point>
+        <point x="54" y="254"></point>
+        <point x="72" y="266"></point>
+        <point x="85" y="252"></point>
+        <point x="107" y="210"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="119" y="75"></point>
+        <point x="179" y="75"></point>
+        <point x="209" y="101"></point>
+        <point x="224" y="135"></point>
+        <point x="220" y="225"></point>
+        <point x="175" y="261"></point>
+        <point x="128" y="261"></point>
+        <point x="81" y="224"></point>
+        <point x="74" y="135"></point>
+        <point x="88" y="99"></point>
+      </polygon>
+    </shape>
+    <shape name="wheel" rotatable="false" editableColorIndex="0">
+      <circle x="3" y="3" marked="true" color="-1920102913" diameter="294" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+      <line endX="150" startY="285" marked="true" color="-1920102913" endY="15" startX="150"></line>
+      <line endX="285" startY="150" marked="true" color="-1920102913" endY="150" startX="15"></line>
+      <circle x="120" y="120" marked="true" color="-1920102913" diameter="60" filled="true"></circle>
+      <line endX="79" startY="40" marked="true" color="-1920102913" endY="269" startX="216"></line>
+      <line endX="269" startY="84" marked="true" color="-1920102913" endY="221" startX="40"></line>
+      <line endX="269" startY="216" marked="true" color="-1920102913" endY="79" startX="40"></line>
+      <line endX="221" startY="40" marked="true" color="-1920102913" endY="269" startX="84"></line>
+    </shape>
+    <shape name="x" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="270" y="75"></point>
+        <point x="225" y="30"></point>
+        <point x="30" y="225"></point>
+        <point x="75" y="270"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="30" y="75"></point>
+        <point x="75" y="30"></point>
+        <point x="270" y="225"></point>
+        <point x="225" y="270"></point>
+      </polygon>
+    </shape>
+  </turtleShapes>
+  <linkShapes>
+    <shape name="default" curviness="0.0">
+      <lines>
+        <line x="-0.2" visible="false">
+          <dash value="0.0"></dash>
+          <dash value="1.0"></dash>
+        </line>
+        <line x="0.0" visible="true">
+          <dash value="1.0"></dash>
+          <dash value="0.0"></dash>
+        </line>
+        <line x="0.2" visible="false">
+          <dash value="0.0"></dash>
+          <dash value="1.0"></dash>
+        </line>
+      </lines>
+      <indicator>
+        <shape name="link direction" rotatable="true" editableColorIndex="0">
+          <line endX="90" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+          <line endX="210" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+        </shape>
+      </indicator>
+    </shape>
+  </linkShapes>
+  <previewCommands>setup repeat 75 [ go ]</previewCommands>
+  <experiments>
+    <experiment name="experiment" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>setup</setup>
+      <go>go</go>
+      <constants>
+        <enumeratedValueSet variable="movie-interval">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="random-shelter?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-elders">
+          <value value="250"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="TS">
+          <value value="70"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="tsunami?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="ETA" first="40" step="5" last="60"></steppedValueSet>
+        <enumeratedValueSet variable="output-files?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="movie-name">
+          <value value="&quot;ArahamaETA&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-cars">
+          <value value="1000"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="snapshots?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="title">
+          <value value="&quot;\&quot;Arahama Scenario - Tohoku 2011\&quot;&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-kids">
+          <value value="250"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-teens">
+          <value value="250"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="movie-frame-rate">
+          <value value="10"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="movie?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-adults">
+          <value value="250"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="%-of-handicap">
+          <value value="0"></value>
+        </enumeratedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="experiment (1)" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>setup</setup>
+      <go>go</go>
+      <metrics>
+        <metric>safe-kids + safe-teens + safe-adults + safe-elders + (safe-cars * 4)</metric>
+        <metric>casualty-kids + casualty-teens + casualty-adults + casualty-elders + (casualty-cars * 4)</metric>
+        <metric>(item 1 item 0 teb-capacity) + (item 1 item 1 teb-capacity)</metric>
+        <metric>(item 1 item 0 exit-capacity)</metric>
+        <metric>(item 1 item 1 exit-capacity)</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="tsunami?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="output-files?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-kids">
+          <value value="0"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="movie-name">
+          <value value="&quot;Tohoku&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-adults">
+          <value value="631"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="random-shelter?">
+          <value value="false"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="u">
+          <value value="14"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-cars">
+          <value value="410"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-elders">
+          <value value="0"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="run-number" first="1" step="1" last="250"></steppedValueSet>
+        <enumeratedValueSet variable="title">
+          <value value="&quot;\&quot;Arahama Scenario - Tohoku 2011\&quot;&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="movie-frame-rate">
+          <value value="10"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="#-of-teens">
+          <value value="0"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="movie?">
+          <value value="false"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="movie-interval">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="%-of-handicap">
+          <value value="0"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="ETA">
+          <value value="67"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="snapshots?">
+          <value value="true"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="TS">
+          <value value="70"></value>
+        </enumeratedValueSet>
+      </constants>
+    </experiment>
+  </experiments>
+</model>

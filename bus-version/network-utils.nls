@@ -1,0 +1,41 @@
+;; network-utils.nls
+;; Utility functions for network-based agent movement in NetLogo
+;; Provides shortest-path (Dijkstra), neighbor lookup, and edge utilities
+
+;; Returns a list of nodes representing the shortest path from start-node to end-node
+;; Uses Dijkstra's algorithm (unweighted by default, can be extended for weights)
+to-report network-shortest-path [start-node end-node]
+  let frontier (list (list start-node [] 0)) ;; (current-node, path-so-far, cost-so-far)
+  let visited []
+  while [not empty? frontier] [
+    let current (first frontier)
+    let node item 0 current
+    let path item 1 current
+    let cost item 2 current
+    if member? node visited [ set frontier but-first frontier stop ]
+    if node = end-node [ report lput node path ]
+    set visited lput node visited
+    let neighbors node-neighbors node
+    foreach neighbors [ n ->
+      if not member? n visited [
+        let edge-len edge-length node n
+        set frontier lput (list n (lput node path) (cost + edge-len)) frontier
+      ]
+    ]
+    set frontier sort-by [[a b] -> (item 2 a) < (item 2 b)] frontier
+  ]
+  report [] ;; no path found
+end
+
+;; Returns a list of neighboring node agents for a given node
+to-report node-neighbors [n]
+  report [to-node] of edges with [from-node = n] ; assumes directed edges
+end
+
+;; Returns the length of the edge between two nodes (or 1 if not found)
+to-report edge-length [from to]
+  let e one-of edges with [from-node = from and to-node = to]
+  ifelse e != nobody [ report [length] of e ] [ report 1 ]
+end
+
+;; Optionally, add more utilities for edge weights, allowed breeds, etc.
