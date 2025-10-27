@@ -24,7 +24,7 @@ You can download NetLogo [here](https://ccl.northwestern.edu/netlogo/download.sh
 
 You can use, modify, adapt this model to your own needs. If you use this model to any extent, we ask you to cite our relevent publications:
 
-+ Mas, E., Suppasri, A., Imamura, F. & Kpshimura, S. (2012). Agent-based Simulation of the 2011 Great East Japan Earthquake/Tsunami Evacuation: An Integrated Model of Tsunami Inundation and Evacuation. Journal of Natural Disaster Science, 34(1), 41–57. https://doi.org/10.2328/jnds.34.41
++ Mas, E., Suppasri, A., Imamura, F. & Koshimura, S. (2012). Agent-based Simulation of the 2011 Great East Japan Earthquake/Tsunami Evacuation: An Integrated Model of Tsunami Inundation and Evacuation. Journal of Natural Disaster Science, 34(1), 41–57. https://doi.org/10.2328/jnds.34.41
 
 + Mas, E., Adriano, B., & Koshimura, S. (2013). An Integrated Simulation of Tsunami Hazard and Human Evacuation in La Punta, Peru. Journal of Disaster Research, 8(2), 285–295. https://doi.org/10.20965/jdr.2013.p0285
 
