@@ -54,5 +54,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Published the original TUNAMI-EVAC1 NetLogo model, spatial datasets, tsunami raster sequence, documentation, and example outputs.
 - Included the original 2011 A* and Rayleigh helper libraries.
 
-[2.0.0]: 
+[2.0.0]: https://doi.org/10.5281/zenodo.6477682
 [1.0.0-alpha]: https://github.com/erick2307/TUNAMI-EVAC/releases/tag/v1.0.0-alpha
