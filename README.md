@@ -1,24 +1,25 @@
-# TUNAMI-EVAC1
+# TUNAMI-EVAC 2
 
-In this repository you will find an [Agent-Based Model](https://en.wikipedia.org/wiki/Agent-based_model) developed for [Tsunami Evacuation](https://link.springer.com/article/10.1007/s00024-015-1105-y) Analysis.  
-The model was developed using [NetLogo](https://ccl.northwestern.edu/netlogo/) v.5.0.1 back in 2012.  
-The details of the development and applications are described in my [PhD Thesis](/resources/PhD_Thesis_ErickMas.pdf) at [Tohoku University](http://www.tohoku.ac.jp/en/).  
+TUNAMI-EVAC is a [NetLogo](https://ccl.northwestern.edu/netlogo/) agent-based model for [tsunami evacuation analysis](https://link.springer.com/article/10.1007/s00024-015-1105-y). The original model was developed by Erick Mas in 2012 as part of a PhD study at [Tohoku University](https://www.tohoku.ac.jp/en/).
 
-The model has not been updated since 2014 (published on April 2022 in Github, I know...why so late? no idea!).  
-My latest trial of the model worked in Version 6.2.2 of NetLogo. (2022.04.20)
+Version 2 migrates the model to NetLogo 7 and substantially improves pathfinding performance while retaining the established evacuation and hazard data. See [CHANGELOG.md](CHANGELOG.md) for the verified changes, benchmark conditions, and known limitations.
 
-The case test in this repo takes about 15 min to run a simulation of a 70 min evacuation.
+The model's development and applications are described in the included [PhD thesis](resources/PhD_Thesis_ErickMas.pdf).
 
-![Snapshot](Output/0K_3600.png?raw=true "Snapshot")
+![Snapshot](Output/0K_4200.png?raw=true "TUNAMI-EVAC snapshot")
 
 ## Getting Started
 
-Clone this repo and open the `.nlogo` file in Netlogo.  
-You can download NetLogo [here](https://ccl.northwestern.edu/netlogo/download.shtml).
+1. Install [NetLogo](https://ccl.northwestern.edu/netlogo/download.shtml). Version 2.0.0 was verified with NetLogo 7.0.4.
+2. Download or clone this repository.
+3. Open `TUNAMI-EVAC2.nlogox` in NetLogo.
+4. Press **setup** for the first run, configure the population and scenario controls, then press **go**.
+
+Simulation outputs are written to the `Output` directory. The model depends on the bundled `SpatialDB`, `TsunamiDB`, `Astar.nls`, and `Rayleigh.nls` files, so keep the package directory structure intact.
 
 ## Example
 
-[Animation](http://www.regid.irides.tohoku.ac.jp/erick/repository/netlogo/Model67.mp4)
+[Animation from the original model](./Model67.mp4)
 
 ## Publications
 
@@ -38,4 +39,4 @@ You can use, modify, adapt this model to your own needs. If you use this model t
 
 ## Author
 
-* **Erick Mas** - [erick2307](https://github.com/erick2307) / [erickmas](https://erickmas.wordpress.com/)
+* **Erick Mas** - [erick2307](https://github.com/erick2307) / [erickmas](https://researchmap.jp/mas.erick?lang=en)

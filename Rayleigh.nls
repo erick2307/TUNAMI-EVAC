@@ -1,0 +1,36 @@
+;*********************************************************************
+; Rayleigh distribution utilities
+; Revised by Erick Mas, June and November 2011
+;
+; This library provides three behaviors:
+;   cum-rayleigh       - evaluates the cumulative distribution function (CDF)
+;   random-rayleigh    - evaluates the probability density function (PDF);
+;                        despite its historical name, it does not draw a sample
+;   random-td-rayleigh - draws a value by applying the inverse CDF to a supplied
+;                        cumulative probability
+;
+; TUNAMI-EVAC 2.0.0 keeps the established default behavior for compatibility:
+; every agent selects an integer mean between u and ETA, then draws from the
+; corresponding Rayleigh distribution. Across agents, this produces a
+; heterogeneous mixture of Rayleigh distributions rather than one Rayleigh
+; distribution. This assumption is documented in CHANGELOG.md and is expected
+; to be reviewed and adjusted in a future version.
+;
+; The parameter u-ray is the distribution mean. The internal scale parameter
+; s-ray is u-ray * sqrt(2 / pi) and is also the mode of that distribution.
+;*********************************************************************
+
+to-report cum-rayleigh [ x-ray u-ray] ;calculates the Rayleigh cumulative distribution
+  let s-ray u-ray * (sqrt (2 / pi ))
+  report 1 - exp ( - ( (x-ray ^ 2) / ( 2 * (s-ray ^ 2) ) ) )
+end
+  
+to-report random-rayleigh [ x-ray u-ray ]
+  let s-ray u-ray * ( sqrt ( 2 / pi ) )
+  report ( x-ray / s-ray ^ 2 ) * exp ( - ( x-ray ^ 2) / (2 * (s-ray ^ 2 )))
+end
+
+to-report random-td-rayleigh [ f-ray u-ray ]
+  let s-ray u-ray * ( sqrt (2 / pi ))
+  report ( sqrt ( -2 * s-ray ^ 2 * ln(1 - f-ray) ) )
+end
