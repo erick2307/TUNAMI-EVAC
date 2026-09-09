@@ -34,8 +34,10 @@ You can use, modify, adapt this model to your own needs. If you use this model t
 +  Mas, E., Koshimura, S., Imamura, F., Suppasri, A., Muhari, A. & Adriano, B. (2015). Recent Advances in Agent-Based Tsunami Evacuation Simulations: Case Studies in Indonesia, Thailand, Japan and Peru. Pure and Applied Geophysics, 172(12), 3409–3424. https://doi.org/10.1007/s00024-015-1105-y
 
 ## Releases
-
+Version 1.0.0
 [![DOI](https://zenodo.org/badge/483123627.svg)](https://zenodo.org/badge/latestdoi/483123627)
+Version 2.0.0
+[![DOI][https://doi.org/10.5281/zenodo.22306109]
 
 ## Author
 
