@@ -19,7 +19,7 @@ Simulation outputs are written to the `Output` directory. The model depends on t
 
 ## Example
 
-[Animation from the original model]([https://youtu.be/EBeAKMpHsTA])
+[Animation from the original model](https://youtu.be/EBeAKMpHsTA)
 
 ## Publications
 
